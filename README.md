@@ -1,411 +1,489 @@
 
 
-````markdown
+
 # URADES
-## A Physics-Informed Hierarchical Framework for Rapid Screening of Nb-Based Refractory Alloys
+## Unified Refractory Alloy Descriptor and Embrittlement Screener
 
-URADES is a **hierarchical, physics-informed analytical framework** developed for the rapid screening and design of Nb-based refractory alloys.
+URADES is a **hierarchical, physics-informed analytical framework** for rapid screening of Nb-based refractory alloys.
 
-The framework combines a **Global Viability Index (GVI)** with case-specific analytical models to evaluate candidate alloys across three Nb-based refractory alloy regimes. It provides a computational route from alloy composition to viability screening, DBTT prediction or embrittlement classification, and inverse alloy design.
+The framework combines a **Global Viability Index (GVI)** for BCC phase-stability screening with three case-specific analytical models for DBTT prediction and embrittlement classification.
 
-URADES is intended for **rapid preliminary screening** before detailed experimental characterization, CALPHAD analysis, or other high-fidelity computational methods.
+URADES is designed as a **rapid screening tool** for identifying potentially viable alloy compositions before detailed CALPHAD analysis and experimental validation.
 
 ---
 
-## Framework at a Glance
+## Framework Overview
 
-```text
+
                          Alloy composition
                                 |
                                 v
-                     Composition validation
+                    Unit conversion / validation
                                 |
                                 v
-                      Case identification
-                                |
-             +------------------+------------------+
-             |                  |                  |
-             v                  v                  v
-          CASE 1             CASE 2             CASE 3
-     Nb engineering       Nb-matrix RCCAs     Nb-based RHEAs
-          alloys                                  /
-     multi-principal alloys
-             |                  |                  |
-             +------------------+------------------+
+                    Case identification
                                 |
                                 v
-                  GLOBAL VIABILITY INDEX (GVI)
-                                |
-             +------------------+------------------+
-             |                  |                  |
-             v                  v                  v
-        S_VEC x S_delta   S_SR x S_VEC x S_delta   S_VEC x S_delta
-             |                  |                  |
-             +------------------+------------------+
-                                |
-                           GVI >= 0.5
-                                |
-             +------------------+------------------+
-             |                  |                  |
-             v                  v                  v
-            IAS                 SR                 EI
-             |                  |                  |
-             v                  v                  v
-           DBTT               DBTT          Embrittlement
-          prediction        prediction       classification
-                                |
-                                v
-                       Candidate screening
-                                |
-                                v
-                         Inverse design
-````
+                  Boundary-condition check
+                         /           \
+                      FAIL            PASS
+                       |                |
+                       v                v
+                   REJECTED           GVI
+                                      |
+                           +----------+----------+
+                           |          |          |
+                           v          v          v
+                        CASE 1     CASE 2     CASE 3
+                        IAS        SR model   EI classifier
+                           |          |          |
+                           v          v          v
+                      DBTT & YS   DBTT & YS   EI / Zone & YS
+                           |          |          |
+                           +----------+----------+
+                                      |
+                                      v
+                             Screening result
+
+
+The three alloy regimes are treated separately because the underlying modelling assumptions differ with increasing compositional complexity.
 
 ---
 
 # 1. Motivation
 
-Nb-based refractory alloys are attractive for high-temperature structural applications because of their high melting temperatures and useful high-temperature mechanical properties.
+Nb-based refractory alloys are promising candidates for high-temperature structural applications because of their high melting temperatures and useful high-temperature mechanical properties.
 
-However, their practical application is strongly constrained by low-temperature brittleness and the associated ductile-to-brittle transition temperature (DBTT).
+A major limitation, however, is their susceptibility to low-temperature brittleness and the associated ductile-to-brittle transition temperature (DBTT).
 
-The compositional design space of Nb-based refractory alloys is large, while experimentally measured DBTT datasets are comparatively limited.
+The compositional space of Nb-based refractory alloys is large, while experimentally available DBTT data are comparatively limited.
 
-This creates a challenge for alloy screening:
+URADES addresses this screening problem through a hierarchical analytical approach in which:
 
-* exhaustive experimental testing is expensive;
-* available experimental datasets are relatively small;
-* different Nb-based alloy regimes do not necessarily follow the same composition-property relationship;
-* purely data-driven models can become difficult to justify when the available dataset is small and heterogeneous.
+* alloy compositions are first classified into three compositional regimes;
+* boundary conditions are checked;
+* BCC viability is assessed using the Global Viability Index;
+* a case-specific analytical model is then applied;
+* candidate compositions can subsequently be explored through inverse design.
 
-URADES addresses this problem using a **hierarchical physics-informed analytical approach** rather than treating the entire Nb-based alloy space as a single statistical problem.
-
----
-
-# 2. URADES Philosophy
-
-URADES is built around three principles.
-
-### 1. Regime-specific modelling
-
-Different Nb-based refractory alloy regimes are treated using different physical assumptions.
-
-### 2. Global viability screening
-
-A common **Global Viability Index (GVI)** is used across all three cases to assess whether a composition lies within the defined viable BCC-based screening region.
-
-### 3. Explicit analytical relationships
-
-The final property prediction or embrittlement classification is obtained from explicit composition-based equations rather than a purely black-box machine-learning model.
-
-The resulting framework is:
-
-> **Global viability screening + case-specific physics-informed prediction/classification**
+The framework is intended to provide a transparent alternative to treating the entire Nb-based refractory alloy space as a single empirical model.
 
 ---
 
-# 3. Three URADES Cases
+# 2. The Three URADES Cases
 
-URADES divides the Nb-based alloy space into three regimes.
+URADES separates the Nb-based alloy space into three regimes.
 
-| Case       | Alloy regime                            | Global viability layer | Case-specific model              | Output                       |
-| ---------- | --------------------------------------- | ---------------------- | -------------------------------- | ---------------------------- |
-| **Case 1** | Nb engineering alloys                   | GVI                    | Independent Alloying Shift (IAS) | DBTT                         |
-| **Case 2** | Nb-matrix RCCAs                         | GVI                    | Sponge Ratio (SR) framework      | DBTT                         |
-| **Case 3** | Nb-based RHEAs / multi-principal alloys | GVI                    | Embrittlement Index (EI)         | Embrittlement classification |
+| Case       | Alloy regime                 | Composition basis | Model                            | Output             |
+| ---------- | ---------------------------- | ----------------- | -------------------------------- | ------------------ |
+| **Case 1** | Dilute Nb engineering alloys | wt% for model     | Independent Alloying Shift (IAS) | DBTT               |
+| **Case 2** | Nb-matrix RCCAs              | at%               | Sponge Ratio (SR) model          | DBTT               |
+| **Case 3** | Nb-based RHEAs               | at%               | Embrittlement Index (EI)         | Embrittlement zone |
 
-The **GVI is applied to all three cases**.
+The case is automatically identified from Nb concentration.
 
-The GVI framework is global, while its mathematical form is adapted to each case by including the survival terms relevant to that alloy regime.
+```text
+Case 1:
+Nb >= 79 wt%
 
----
+Case 2:
+Nb < 79 wt% and Nb >= 50 at%
 
-# 4. Global Viability Index (GVI)
+Case 3:
+Nb < 50 at%
+```
 
-The **Global Viability Index (GVI)** is the global viability-screening layer of URADES.
-
-It combines sigmoid survival scores associated with:
-
-* embrittler-buffer balance;
-* valence electron concentration (VEC);
-* atomic-size mismatch (δ).
-
-The general GVI framework is:
-
-**GVI = S_SR × S_VEC × S_δ**
-
-where:
-
-**S_SR = 1 / [1 + exp(8 × (SR_W − 1.5))]**
-
-**S_VEC = 1 / [1 + exp(15 × (VEC − 5.3))]**
-
-**S_δ = 1 / [1 + exp(10 × (δ − 6.5))]**
-
-Each survival score approaches unity when its corresponding descriptor is within its favourable range and decreases as the descriptor approaches or exceeds its calibrated threshold.
+The classifier internally converts between atomic and weight percentages where required.
 
 ---
 
-## 4.1 Sponge Ratio Used in GVI
+# 3. Global Viability Index (GVI)
 
-The embrittler-buffer ratio used by the GVI is:
+The **Global Viability Index (GVI)** is the common phase-stability screening layer of URADES.
 
-**SR_W = [W + 0.077 × Mo] / [Hf + Zr + Ti + 1]**
+GVI is used across **all three cases**.
 
-where the elemental concentrations are expressed in wt.%.
+The global framework is constructed from three sigmoid survival terms:
 
-The `+1` denominator offset prevents divergence when the buffer-element concentration approaches zero.
+```text
+S_VEC
+S_delta
+S_SR
+```
+
+The terms included in the final GVI depend on the alloy regime.
+
+### Case 1
+
+```text
+GVI = S_VEC × S_delta
+```
+
+### Case 2
+
+```text
+GVI = S_SR × S_VEC × S_delta
+```
+
+### Case 3
+
+```text
+GVI = S_VEC × S_delta
+```
+
+Thus, GVI is a **global descriptor framework**, while the Sponge Ratio survival term is activated specifically for Case 2.
 
 ---
 
-## 4.2 Valence Electron Concentration
+## 3.1 VEC Survival Score
 
-VEC is calculated from atomic-percent composition:
+The VEC survival score is:
 
-**VEC = Σ(x_i × VEC_i)**
+```text
+S_VEC = 1 / [1 + exp(15 × (VEC − 5.3))]
+```
 
-where:
+The VEC threshold used by the model is:
 
-* `x_i` is the atomic fraction of element `i`;
-* `VEC_i` is the elemental VEC.
+```text
+VEC threshold = 5.3
+```
+
+VEC is calculated from atomic-fraction-weighted elemental VEC values:
+
+```text
+VEC = Σ(x_i × VEC_i)
+```
+
+where `x_i` is the atomic fraction of element `i`.
 
 ---
 
-## 4.3 Atomic-Size Mismatch
+## 3.2 Atomic-Size Mismatch Survival Score
 
 The atomic-size mismatch is calculated as:
 
-**δ = 100 × [Σ x_i × (1 − r_i / r̄)²]^(1/2)**
+```text
+δ = 100 × [Σ x_i × (1 − r_i / r̄)^2]^(1/2)
+```
 
-where:
-
-**r̄ = Σ(x_i × r_i)**
-
-and `r_i` is the atomic radius of element `i`.
-
----
-
-# 5. Case-Specific Application of GVI
-
-GVI is **global across URADES**, but not every survival term is physically relevant to every alloy regime.
-
-Therefore, the global GVI framework is applied using the appropriate survival terms for each case.
-
-## Case 1
-
-For Nb engineering alloys:
-
-**GVI_Case1 = S_VEC × S_δ**
-
-The `S_SR` term is not included because the embrittler-buffer competition represented by `SR_W` is not considered the governing viability criterion for dilute Nb engineering alloys.
-
----
-
-## Case 2
-
-For Nb-matrix RCCAs:
-
-**GVI_Case2 = S_SR × S_VEC × S_δ**
-
-The `S_SR` term is included because embrittler-buffer competition is relevant to the Nb-matrix RCCA regime.
-
----
-
-## Case 3
-
-For Nb-based RHEAs and multi-principal alloys:
-
-**GVI_Case3 = S_VEC × S_δ**
-
-For Case 3, embrittler-buffer competition is represented separately through the Embrittlement Index.
-
----
-
-## 5.1 GVI Screening Criterion
-
-A common viability criterion is applied across all three cases:
-
-**GVI >= 0.5**
-
-A composition satisfying this condition passes the GVI viability screen and proceeds to the corresponding case-specific model.
-
-Compositions with:
-
-**GVI < 0.5**
-
-are flagged for further verification, such as CALPHAD analysis, or rejected from the subsequent screening pathway according to the defined workflow.
-
----
-
-# 6. Case 1: Independent Alloying Shift (IAS)
-
-Case 1 represents Nb-dominated engineering alloys in which Nb remains the dominant matrix element.
-
-The underlying assumption is that individual alloying additions behave approximately as independent perturbations to the Nb matrix.
-
-The reference DBTT is:
-
-**DBTT_Nb = −150 °C**
-
-The Independent Alloying Shift model is:
-
-**DBTT = −150 + 8W + 15Mo − 5V − 2Ti + Zr + 0.5Hf**
-
-where alloying concentrations are expressed in wt.% and DBTT is expressed in °C.
-
-The model can therefore be viewed as:
-
-**DBTT = DBTT_Nb + Σ(ΔDBTT_i)**
-
-where each alloying element produces an individual shift relative to the Nb reference state.
-
-### Case 1 workflow
+with:
 
 ```text
-Alloy composition
-       |
-       v
-Global Viability Index
-       |
-       v
-GVI screening
-       |
-       v
-Independent Alloying Shift
-       |
-       v
-Predicted DBTT
+r̄ = Σ(x_i × r_i)
+```
+
+The corresponding survival score is:
+
+```text
+S_delta = 1 / [1 + exp(10 × (δ − 6.5))]
+```
+
+The calibrated δ threshold is:
+
+```text
+δ threshold = 6.5 %
 ```
 
 ---
 
-# 7. Case 2: Sponge Ratio Framework
+## 3.3 Sponge Ratio Survival Score
+
+For the GVI phase-stability calculation, the embrittler-buffer ratio is calculated using **weight percent**:
+
+```text
+SR_W =
+(W + 0.077 × Mo)/(Hf + Zr + Ti + 1)
+```
+
+The corresponding survival score is:
+
+```text
+S_SR = 1 / [1 + exp(8 × (SR_W − 1.5))]
+```
+
+The threshold used for this survival function is:
+
+```text
+SR_W threshold = 1.5
+```
+
+### Important distinction
+
+The `SR_W` descriptor used inside **GVI** is calculated in **wt%**.
+
+This is distinct from the **Case 2 predictive Sponge Ratio**, which operates on **at%** composition.
+
+---
+
+# 4. GVI Screening Criterion
+
+The common GVI threshold is:
+
+```text
+GVI >= 0.5
+```
+
+A composition satisfying this condition receives:
+
+```text
+PASS
+```
+
+A composition with:
+
+```text
+GVI < 0.5
+```
+
+is flagged as:
+
+```text
+SECONDARY PHASE RISK — verify with CALPHAD
+```
+
+A low GVI is therefore a **screening flag**, not an automatic computational hard rejection.
+
+Boundary-condition violations are handled separately and result in rejection.
+
+---
+
+# 5. CALPHAD Verification Trigger
+
+The GVI implementation also contains a documented CALPHAD verification condition.
+
+If all three conditions are simultaneously satisfied:
+
+```text
+Mo > 5 at%
+Hf > 5 at%
+Zr > 5 at%
+```
+
+the composition is flagged for additional CALPHAD verification regardless of its GVI value.
+
+This condition was introduced based on the CALPHAD validation dataset.
+
+A documented example is:
+
+```text
+Nb-5W-10Mo-5Hf-5Zr-5Ti
+```
+
+which receives a high GVI value but is identified by CALPHAD as a multiphase alloy.
+
+This demonstrates that GVI is intended as a **rapid screening descriptor**, rather than a replacement for detailed phase-equilibrium calculations.
+
+---
+
+# 6. Case 1 — Independent Alloying Shift (IAS)
+
+Case 1 represents dilute Nb engineering alloys where Nb remains the dominant matrix element.
+
+The model treats individual alloying additions as approximately independent shifts relative to the DBTT of pure Nb.
+
+The baseline value is:
+
+```text
+DBTT_Nb = −150 °C
+```
+
+The final IAS model implemented in URADES is:
+
+```text
+DBTT = −150 + 8W + 15Mo − 5V − 2Ti + 1Zr + 0.5Hf
+    
+```
+
+All alloying concentrations in this equation are expressed in **wt%**.
+
+The corresponding coefficients are:
+
+| Element |  DBTT shift |
+| ------- | ----------: |
+| W       |   +8 °C/wt% |
+| Mo      |  +15 °C/wt% |
+| V       |   −5 °C/wt% |
+| Ti      |   −2 °C/wt% |
+| Zr      |   +1 °C/wt% |
+| Hf      | +0.5 °C/wt% |
+
+The Case 1 dataset contains:
+
+```text
+n = 23 alloys
+```
+
+with the reported validation metrics:
+
+```text
+R²  = 0.856
+MAE = 15.9 °C
+```
+
+The implementation automatically converts the input composition to wt% before evaluating the IAS model.
+
+---
+
+# 7. Case 2 — Nb-Matrix RCCAs
 
 Case 2 represents Nb-matrix refractory complex concentrated alloys (RCCAs).
 
-In this regime, the relative balance between embrittling and buffering elements becomes important.
+The model combines:
 
-The Case 2 framework combines:
+1. an alloying-induced DBTT shift;
+2. the Sponge Ratio;
+3. a multiplicative amplification of the alloying shift.
 
-1. GVI viability screening;
-2. a composition-dependent alloying contribution;
-3. the Sponge Ratio;
-4. DBTT prediction.
-
----
-
-## 7.1 Sponge Ratio
-
-The Sponge Ratio is defined as:
-
-**SR = [W + 0.077Mo] / [Hf + Zr + Ti + 1]**
-
-where elemental concentrations are expressed in wt.%.
-
-The numerator represents the principal embrittler contribution, with Mo included through the calibrated coefficient.
-
-The denominator represents the buffering contribution of Hf, Zr and Ti.
+All Case 2 model concentrations are expressed in **at%**.
 
 ---
 
-## 7.2 Case 2 DBTT Model
+## 7.1 Alloying Contribution
 
-The Case 2 DBTT relationship is:
-
-**DBTT = −150 + ΔT_alloy × (1 + SR)**
-
-where:
-
-**ΔT_alloy = k_W × W + k_Mo × Mo + k_B × (Hf + Zr + Ti)**
-
-The coefficients `k_W`, `k_Mo`, and `k_B` are calibrated using the Case 2 dataset.
-
-The model therefore combines an alloying-induced DBTT shift with amplification associated with the embrittler-buffer balance.
-
-### Case 2 workflow
+The model calculates:
 
 ```text
-Alloy composition
-       |
-       v
-Global Viability Index
-       |
-       v
-GVI screening
-       |
-       v
-Sponge Ratio
-       |
-       v
-Alloying contribution
-       |
-       v
-Predicted DBTT
+ΔT_alloy = 2.244W + 7.899Mo + 1.723(Hf + Zr + Ti)
 ```
+
+where all concentrations are in at%.
 
 ---
 
-# 8. Case 3: Embrittlement Index (EI)
+## 7.2 Sponge Ratio
 
-Case 3 represents Nb-based refractory high-entropy alloys and other multi-principal refractory alloys.
+The Case 2 predictive Sponge Ratio is:
 
-In this regime, the alloy composition is no longer treated as a dilute perturbation of a dominant Nb matrix.
+```text
+SR =
+W/(Hf + Zr + Ti + 1)
+```
 
-The embrittlement tendency is represented using an Embrittlement Index:
+The calibrated Mo contribution to this multiplier is:
 
-**EI = [W + 0.48Mo] / [Hf + Zr + Ti + 1]**
+```text
+α = 0
+```
 
-The EI is used to classify the alloy according to its embrittlement/DBTT-risk regime.
+Therefore Mo contributes to the direct alloying term but does not enter the Sponge Ratio multiplier in the Case 2 formulation.
+
+---
+
+## 7.3 DBTT Prediction
+
+The Case 2 model is:
+
+```text
+DBTT = −150 + ΔT_alloy × (1 + SR)
+```
+
+The implementation reports:
+
+```text
+LOOCV R² = 0.871
+MAE       = 26 °C
+```
+
+with:
+
+```text
+n = 10
+```
+
+for the validated LOOCV dataset.
+
+The full Case 2 dataset contains 11 alloys, with `Nb-40Mo-10Ti` excluded from the reported LOOCV because its Mo concentration exceeds the validated Case 2 limit.
+
+---
+
+# 8. Case 3 — Embrittlement Index (EI)
+
+Case 3 represents Nb-based refractory high-entropy alloys and other multi-principal Nb-based refractory alloys.
+
+Unlike Case 1, these compositions are not treated as dilute perturbations of a dominant Nb matrix.
+
+The Case 3 model uses an Embrittlement Index:
+
+```text
+EI =
+(W + 0.48Mo)/(Hf + Zr + Ti + 1)
+```
+
+All concentrations are expressed in **at%**.
+
+The Mo weighting parameter is:
+
+```text
+α = 0.48
+```
+
+Thus Mo contributes at 48% of the W weighting within the EI formulation.
+
+---
+
+## 8.1 EI Classification
+
+The implemented classification is:
+
+| EI range           | Classification         |
+| ------------------ | ---------------------- |
+| EI < 0.10          | Ductile Zone           |
+| 0.10 <= EI < 0.50  | Transition Zone        |
+| 0.50 <= EI < 15.50 | Brittle Zone           |
+| EI >= 15.50        | Confirmed Brittle Zone |
+
+The Case 3 dataset contains:
+
+```text
+n = 25 alloys
+```
+
+with a reported leave-one-out classification accuracy of:
+
+```text
+84% (21/25)
+```
 
 Importantly:
 
-**EI ≠ DBTT**
-
-EI is therefore a **classification descriptor**, not a direct DBTT prediction equation.
-
-### Case 3 workflow
-
 ```text
-Alloy composition
-       |
-       v
-Global Viability Index
-       |
-       v
-GVI screening
-       |
-       v
-Embrittlement Index
-       |
-       v
-Embrittlement / DBTT-risk classification
+EI is a classification descriptor.
+EI is not a direct DBTT prediction.
 ```
 
 ---
 
-# 9. The α Transition
+# 9. The Mo Weighting Transition
 
-One of the key findings examined within URADES is the different role of Mo in the embrittler contribution between alloy regimes.
+A central analysis within URADES concerns the change in the calibrated Mo contribution between the RCCA and RHEA regimes.
 
-The parameter `α` controls the Mo contribution to the embrittler term.
+The general embrittler expression can be represented as:
 
-For the general Case 2 Sponge Ratio:
+```text
+W + αMo
+```
 
-**SR = [W + α × Mo] / [Hf + Zr + Ti + 1]**
+The final implementations use:
 
-The calibrated Case 2 formulation corresponds to:
+```text
+Case 2:
+α = 0
 
-**α_Case2 = 0**
+Case 3:
+α = 0.48
+```
 
-For Case 3, the corresponding EI formulation uses:
+Therefore:
 
-**α_Case3 = 0.48**
+```text
+RCCA regime  → α = 0
+RHEA regime  → α = 0.48
+```
 
-The repository includes a sensitivity analysis that sweeps `α` across a defined range for the Case 2 and Case 3 datasets independently.
+The repository includes an α-sensitivity analysis to examine this parameter across the two alloy regimes.
 
-The analysis demonstrates the regime-dependent change in the contribution of Mo and identifies the corresponding optimum/supported α values.
-
-The sensitivity analysis is provided in:
+The analysis is located in:
 
 ```text
 analysis/alpha_sensitivity.py
@@ -413,240 +491,394 @@ analysis/alpha_sensitivity.py
 
 ---
 
-# 10. Inverse Alloy Design
+# 10. Boundary Conditions
 
-URADES can also be used in the inverse direction.
+URADES applies explicit composition limits before the corresponding property model is evaluated.
 
-Instead of asking:
+## Case 1 limits
 
-> "What DBTT does this composition produce?"
+The following limits are expressed in wt%:
 
-the inverse-design workflow asks:
+| Element | Maximum |
+| ------- | ------: |
+| W       |  20 wt% |
+| Mo      |  10 wt% |
+| Hf      |  10 wt% |
+| Zr      |   5 wt% |
+| Ti      |  10 wt% |
 
-> "Which compositions satisfy the required property and viability constraints?"
+---
 
-The search procedure evaluates a defined composition space and applies sequential screening criteria.
+## Case 2 limits
+
+The following limits are expressed in at%:
+
+| Quantity     |  Maximum |
+| ------------ | -------: |
+| W            |   15 at% |
+| Mo           |   18 at% |
+| Hf           | 22.4 at% |
+| Zr           |  8.5 at% |
+| Ti           |   10 at% |
+| Hf + Zr + Ti | 22.4 at% |
+
+---
+
+## Case 3 limits
+
+The following limits are expressed in at%:
+
+| Element | Maximum |
+| ------- | ------: |
+| W       |  20 at% |
+| Mo      |  20 at% |
+| Hf      |  20 at% |
+| Zr      |  33 at% |
+| Ti      |  33 at% |
+
+Compositions violating the applicable limits are returned as:
 
 ```text
-Composition space
+REJECTED
+```
+
+together with the specific boundary-condition violation.
+
+---
+
+# 11. Complete URADES Pipeline
+
+The main entry point is:
+
+```text
+run_URADES()
+```
+
+The complete workflow is:
+
+```text
+Input composition
        |
        v
-Composition validity
+Convert composition if required
        |
        v
+Identify Case
+       |
+       v
+Check boundary conditions
+       |
+       +------ fail ------> REJECTED
+       |
+      pass
+       |
+       v
+Calculate GVI
+       |
+       +------ GVI < 0.5 ------> FLAGGED
+       |
+       v
+Run case-specific model
+       |
+       +------------+------------+
+       |            |            |
+       v            v            v
+      IAS           SR           EI
+       |            |            |
+       v            v            v
+     DBTT         DBTT       Classification
+       |            |            |
+       +------------+------------+
+                    |
+                    v
+              Final result
+```
+
+The function returns a structured Python dictionary containing the case, GVI information, status, and case-specific results.
+
+---
+
+# 12. Additional Calculated Quantities
+
+The core implementation also provides supporting quantities used for screening and design.
+
+These include:
+
+* rule-of-mixtures melting temperature;
+* estimated density;
+* Case 1 yield-strength estimate;
+* Case 2 yield-strength estimate;
+* composition conversions between at% and wt%.
+
+These supporting quantities are implemented in `core.py` and are primarily used by the screening and inverse-design workflow.
+
+They should be regarded as **screening estimates**, rather than replacements for experimentally measured properties.
+
+---
+
+# 13. Inverse Alloy Design
+
+URADES can be used in the forward direction:
+
+```text
+Composition → Predicted property
+```
+
+but it can also be used in the inverse direction:
+
+```text
+Property requirements → Candidate compositions
+```
+
+The inverse-design workflow searches a defined composition space and applies sequential screening constraints.
+
+```text
+Composition search space
+          |
+          v
 Case identification
-       |
-       v
+          |
+          v
+Boundary-condition screening
+          |
+          v
 GVI screening
-       |
-       v
-Boundary conditions
-       |
-       v
+          |
+          v
 Property constraints
-       |
-       +---- DBTT target
-       |
-       +---- Yield-strength target
-       |
-       +---- Density target
-       |
-       v
+          |
+          +---- DBTT target
+          |
+          +---- Yield-strength target
+          |
+          +---- Density target
+          |
+          v
 Candidate ranking
 ```
 
-The inverse-design implementation is provided in:
+The implementation is provided in:
 
 ```text
 inverse_design/search.py
 ```
 
-A demonstration search is included to illustrate the complete screening workflow.
-
 ---
 
-# 11. Validation
+# 14. Validation
 
-URADES is validated against experimentally reported literature data and, where available, independent CALPHAD information for phase-viability assessment.
+The repository separates the final computational framework from its validation scripts.
 
-Validation is separated from the core model implementation.
-
-This allows the user to distinguish between:
-
-* the model itself;
-* the data used to calibrate or test it;
-* the validation procedure;
-* the resulting performance metrics.
-
----
-
-## 11.1 Case 1 Validation
-
-The Case 1 validation script:
+The validation structure is:
 
 ```text
-validation/validate_case1.py
+validation/
+├── validate_case1.py
+├── validate_case2.py
+├── validate_case3.py
+└── validate_gvi.py
 ```
 
-evaluates the IAS model against the Case 1 dataset.
-
-The analysis includes:
-
-* measured DBTT;
-* predicted DBTT;
-* absolute error;
-* parity plot;
-* R²;
-* MAE.
-
-The final validation is intended to reproduce the reported Case 1 results.
+This allows the model implementation and the validation procedure to remain independently inspectable.
 
 ---
 
-## 11.2 Case 2 Validation
+## Case 1
 
-The Case 2 validation script:
+Validation against the 23-alloy literature dataset.
+
+Reported metrics:
 
 ```text
-validation/validate_case2.py
+R²  = 0.856
+MAE = 15.9 °C
+n   = 23
 ```
-
-evaluates the Sponge Ratio framework.
-
-The analysis includes:
-
-* measured DBTT;
-* predicted DBTT;
-* Sponge Ratio;
-* absolute error;
-* parity plot;
-* Leave-One-Out Cross-Validation (LOOCV);
-* R²;
-* MAE.
-
-The LOOCV implementation uses the defined Case 2 validation dataset and exclusion criteria reported in the associated study.
 
 ---
 
-## 11.3 Case 3 Validation
+## Case 2
 
-The Case 3 validation script:
+Validation against the Case 2 literature dataset using the defined LOOCV procedure.
+
+Reported metrics:
 
 ```text
-validation/validate_case3.py
+LOOCV R² = 0.871
+MAE      = 26 °C
+n        = 10
 ```
 
-evaluates the EI-based classification.
-
-The analysis includes:
-
-* Embrittlement Index;
-* predicted classification;
-* experimental classification;
-* confusion matrix;
-* classification accuracy.
-
-The Case 3 framework is therefore evaluated as a classification model rather than as a direct DBTT regression model.
+The full dataset contains 11 alloys, with `Nb-40Mo-10Ti` excluded from the reported LOOCV analysis.
 
 ---
 
-## 11.4 GVI Validation
+## Case 3
 
-The GVI validation script:
+Validation of the EI classification against 25 reported alloys.
+
+Reported performance:
 
 ```text
-validation/validate_gvi.py
+LOO accuracy = 84%
+Correct classifications = 21/25
 ```
 
-compares GVI predictions against the available CALPHAD-based phase-stability information.
-
-The validation includes the defined CALPHAD alloy tables and explicitly identifies cases where the GVI and CALPHAD classifications differ.
-
-The repository also documents the relevant boundary-condition interpretation for cases where a discrepancy occurs.
-
 ---
 
-# 12. Validation Metrics
+## GVI
 
-For regression-based models, the following metrics are used.
-
-### Mean Absolute Error
-
-**MAE = (1/N) × Σ|y_i − ŷ_i|**
-
-### Root Mean Squared Error
-
-**RMSE = [(1/N) × Σ(y_i − ŷ_i)²]^(1/2)**
-
-### Coefficient of Determination
-
-**R² = 1 − [Σ(y_i − ŷ_i)² / Σ(y_i − ȳ)²]**
-
-For classification-based models, classification accuracy and confusion matrices are used.
-
-Training-set performance and cross-validated performance are kept separate.
-
----
-
-# 13. Validation Summary
-
-The validation scripts reproduce the principal validation results associated with the URADES study.
-
-| Component        | Validation approach             | Primary metrics            |
-| ---------------- | ------------------------------- | -------------------------- |
-| **Case 1 – IAS** | Literature DBTT dataset         | R², MAE, RMSE              |
-| **Case 2 – SR**  | LOOCV + literature DBTT dataset | R², MAE, RMSE              |
-| **Case 3 – EI**  | Classification validation       | Accuracy, confusion matrix |
-| **GVI**          | CALPHAD comparison              | Agreement / classification |
-
-The numerical results are generated directly by the validation scripts rather than manually entered into the prediction engine.
-
----
-
-# 14. Machine-Learning Benchmarking
-
-Machine-learning models were investigated during development as independent benchmarks.
-
-They are not part of the core URADES framework.
-
-The benchmark models include:
-
-* Random Forest (RF);
-* Gaussian Process Regression (GPR);
-* XGBoost in the development study.
-
-These models are kept separate from the core repository because the primary purpose of URADES is the physics-informed analytical framework.
-
-The ML benchmarking can be added as a separate component in a future repository version.
-
-Importantly, URADES-derived quantities such as GVI, SR, EI, or predicted DBTT are not used as input features when evaluating whether conventional ML can independently reproduce the target property.
-
-This avoids information leakage from the proposed framework into the benchmark models.
-
----
-
-# 15. Reproducibility
-
-The repository is designed to reproduce the computational workflow using the files contained within the repository.
-
-The core implementation does not require external Excel spreadsheets or hidden development files.
+GVI is additionally compared with CALPHAD results using the documented CALPHAD validation datasets.
 
 The repository contains:
 
-* the final URADES engine;
-* the three experimental datasets;
-* CALPHAD validation data;
-* validation scripts;
-* α-sensitivity analysis;
-* inverse-design search;
-* demonstration scripts;
-* Streamlit application.
+```text
+CALPHAD_FULL
+CALPHAD_SUMMARY
+```
 
-All final numerical parameters and model equations should be traceable to the associated study and documented validation procedure.
+including the documented false-positive case used to establish the additional CALPHAD verification trigger.
 
 ---
 
-# 16. Repository Structure
+# 15. Data
+
+All final datasets used by the repository are centralized in:
+
+```text
+urades/data.py
+```
+
+The module contains:
+
+```text
+CASE1_DATA
+CASE2_DATA
+CASE3_DATA
+
+CALPHAD_FULL
+CALPHAD_SUMMARY
+```
+
+This provides a **single source of truth** for the data used by the validation and demonstration scripts.
+
+The dataset file documents the composition units, dataset sizes, validation metrics, and CALPHAD information associated with each dataset.
+
+Experimental values should not be modified without updating the corresponding validation analysis.
+
+---
+
+# 16. Core Implementation
+
+The primary computational implementation is contained in:
+
+```text
+urades/core.py
+```
+
+Major functions include:
+
+```text
+atomic_to_weight()
+weight_to_atomic()
+
+identify_case()
+check_boundary_conditions()
+
+calc_GVI()
+
+predict_case1()
+predict_case2()
+predict_case3()
+
+run_URADES()
+```
+
+Supporting descriptor functions include:
+
+```text
+_calc_VEC()
+_calc_delta()
+_calc_density()
+_calc_Tm_ROM()
+```
+
+The implementation is deliberately centralized so that the same equations are used by demonstrations, validation, inverse design, and the application.
+
+---
+
+# 17. Example Usage
+
+A simple demonstration is provided in:
+
+```text
+examples/demo.py
+```
+
+The demonstration is intended to show how a researcher can pass an alloy composition to URADES and obtain:
+
+* automatically identified alloy case;
+* Nb content;
+* boundary-condition status;
+* GVI;
+* DBTT prediction or EI classification;
+* supporting screening quantities.
+
+A minimal usage pattern is:
+
+```python
+from urades.core import run_URADES
+
+composition = { "Nb": 75.4, "Hf": 15.0, "Ti": 5.5, "W": 4.1 }
+
+result = run_URADES(composition, input_unit="at")
+```
+
+The actual input unit can be specified as either:
+
+```text
+"at"
+```
+
+or:
+
+```text
+"wt"
+```
+
+with the required internal conversions handled by the framework.
+
+---
+
+# 18. Streamlit Application
+
+An interactive Streamlit application is provided in:
+
+```text
+app/app.py
+```
+
+The application provides an interface for entering alloy compositions and viewing the corresponding URADES screening result.
+
+The application uses the same core functions as the command-line implementation.
+
+Therefore:
+
+```text
+Streamlit interface
+        |
+        v
+run_URADES()
+        |
+        v
+Same URADES calculations
+```
+
+The scientific equations are not duplicated inside the user interface.
+
+---
+
+# 19. Repository Structure
 
 ```text
 URADES/
@@ -681,125 +913,7 @@ URADES/
 
 ---
 
-# 17. Core Package
-
-The main computational engine is contained in:
-
-```text
-urades/core.py
-```
-
-The final implementation contains the following major components:
-
-```text
-atomic_to_weight()
-identify_case()
-check_boundary_conditions()
-
-calc_GVI()
-
-predict_case1()
-predict_case2()
-predict_case3()
-
-run_URADES()
-```
-
-The core engine contains the final physics-based framework only.
-
-Machine-learning benchmarking, exploratory parameter searches, plotting, and development-history calculations are kept outside the core model.
-
----
-
-# 18. Data
-
-The datasets required by the final framework are stored in:
-
-```text
-urades/data.py
-```
-
-The module contains:
-
-* Case 1 dataset;
-* Case 2 dataset;
-* Case 3 dataset;
-* CALPHAD data used for GVI validation.
-
-The datasets are kept in a single location so that all validation and demonstration scripts use the same source data.
-
-This provides a single source of truth for the repository.
-
-Each dataset should retain its literature/source information where applicable.
-
----
-
-# 19. Example
-
-A minimal demonstration is provided in:
-
-```text
-examples/demo.py
-```
-
-The demonstration runs representative compositions through the complete URADES workflow.
-
-Example compositions include:
-
-* Cb-752;
-* C-103;
-* V1;
-* a representative RHEA.
-
-The example demonstrates automatic routing of an input composition through:
-
-```text
-Composition
-     |
-     v
-Case identification
-     |
-     v
-GVI
-     |
-     v
-Boundary conditions
-     |
-     v
-Case-specific model
-     |
-     v
-Final result
-```
-
-The example is intended to provide a rapid demonstration of the framework.
-
----
-
-# 20. Streamlit Application
-
-A simple interactive interface is provided in:
-
-```text
-app/app.py
-```
-
-The application allows the user to specify alloy composition and automatically evaluates:
-
-* alloy case;
-* boundary-condition status;
-* GVI;
-* case-specific prediction/classification.
-
-The application uses the same functions as the core URADES implementation.
-
-The Streamlit interface does not contain a separate copy of the scientific equations.
-
-This ensures that the application and command-line calculations use the same underlying model.
-
----
-
-# 21. Running the Repository
+# 20. Installation
 
 Clone the repository:
 
@@ -808,55 +922,81 @@ git clone <repository-url>
 cd URADES
 ```
 
-Install the required packages:
+Install the required Python packages:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Run the demonstration:
+---
+
+# 21. Running the Demonstration
+
+Run:
 
 ```bash
 python examples/demo.py
 ```
 
-Run Case 1 validation:
+This executes representative alloy compositions through the URADES framework.
+
+---
+
+# 22. Running Validation
+
+### Case 1
 
 ```bash
 python validation/validate_case1.py
 ```
 
-Run Case 2 validation:
+### Case 2
 
 ```bash
 python validation/validate_case2.py
 ```
 
-Run Case 3 validation:
+### Case 3
 
 ```bash
 python validation/validate_case3.py
 ```
 
-Run GVI validation:
+### GVI
 
 ```bash
 python validation/validate_gvi.py
 ```
 
-Run the α-sensitivity analysis:
+---
+
+# 23. Running the α-Sensitivity Analysis
+
+Run:
 
 ```bash
 python analysis/alpha_sensitivity.py
 ```
 
-Run the inverse-design search:
+The analysis examines the effect of the Mo weighting parameter α on the corresponding Case 2 and Case 3 model behaviour.
+
+---
+
+# 24. Running the Inverse-Design Search
+
+Run:
 
 ```bash
 python inverse_design/search.py
 ```
 
-Launch the Streamlit application:
+The script searches the defined composition space and applies the implemented viability and property constraints.
+
+---
+
+# 25. Running the Interactive Application
+
+Launch the Streamlit interface using:
 
 ```bash
 streamlit run app/app.py
@@ -864,136 +1004,189 @@ streamlit run app/app.py
 
 ---
 
-# 22. Limitations
+# 26. Machine-Learning Benchmarking
 
-URADES is a **screening framework**, not a replacement for experimental or high-fidelity computational methods.
+Machine-learning models were investigated separately during the development of the study.
+
+These include:
+
+* Random Forest;
+* Gaussian Process Regression;
+* XGBoost.
+
+They are **not part of the core URADES prediction engine**.
+
+The purpose of the repository is to provide the final physics-informed analytical framework rather than to combine the framework with a machine-learning predictor.
+
+Machine-learning benchmarking can therefore be treated as a separate analysis from the core URADES implementation.
+
+---
+
+# 27. Limitations
+
+URADES is a **rapid screening framework** and should not be interpreted as a replacement for detailed materials characterization.
 
 Important limitations include:
 
-### Limited dataset size
+### Dataset size
 
-The available experimental datasets are small compared with conventional machine-learning datasets.
+The experimental datasets are relatively small.
 
-### Dataset heterogeneity
+### Literature variability
 
-Literature DBTT measurements can differ in:
+DBTT measurements can be affected by:
 
-* alloy processing history;
+* processing history;
 * heat treatment;
 * microstructure;
 * specimen geometry;
 * testing conditions;
 * measurement methodology.
 
-### Model applicability
+### Composition-only modelling
 
-Each analytical model is developed for a defined compositional regime.
-
-Extrapolation outside the applicable composition range should therefore be treated cautiously.
-
-### Microstructural effects
-
-URADES is primarily composition-based and does not explicitly model every microstructural factor affecting DBTT and mechanical behaviour.
+The principal models are composition-based and do not explicitly account for every microstructural variable affecting DBTT or embrittlement.
 
 ### Phase stability
 
-GVI provides a rapid viability screen. It does not replace CALPHAD or experimental phase identification.
+GVI provides a rapid viability assessment. This GVI methodology do provides considerable understanding about the phase stability, it does not replace CALPHAD or experimental phase identification.
+
+### Extrapolation
+
+The models should be used within their defined compositional boundaries.
 
 ### Experimental verification
 
-A favourable URADES result identifies a candidate for further investigation. It does not guarantee experimental success.
+A composition passing URADES screening should be regarded as a candidate for further investigation, not as an experimentally guaranteed alloy.
 
 ---
 
-# 23. Intended Use
+# 28. Intended Workflow
 
-URADES is intended for the early-stage screening and design of Nb-based refractory alloys.
-
-A typical workflow is:
+URADES is intended to be used as an early-stage screening layer:
 
 ```text
-Large composition space
-        |
-        v
-      URADES
-        |
-        v
-Global viability screening
-        |
-        v
-Case-specific prediction
-        |
-        v
-Candidate ranking
-        |
-        v
-Inverse design
-        |
-        v
-CALPHAD / detailed modelling
-        |
-        v
-Experimental validation
+Large alloy composition space
+             |
+             v
+          URADES
+             |
+             v
+     Boundary conditions
+             |
+             v
+            GVI
+             |
+             v
+     Case-specific model
+             |
+             v
+   Candidate identification
+             |
+             v
+      Inverse design
+             |
+             v
+       CALPHAD analysis
+             |
+             v
+   Experimental validation
 ```
 
-The objective is to reduce the number of compositions requiring detailed investigation while retaining an interpretable connection between composition and predicted behaviour.
+The purpose is to reduce the number of candidate compositions requiring detailed investigation while retaining an interpretable relationship between composition and predicted behaviour.
 
 ---
 
-# 24. Scientific Positioning
+# 29. Scientific Positioning
 
-URADES can be described as a:
+URADES is a:
 
 > **Hierarchical physics-informed analytical framework for rapid screening of Nb-based refractory alloys.**
 
 The framework is:
 
-* **physics-informed** because it uses composition-derived descriptors and physically motivated relationships;
-* **analytical** because the principal models are explicit equations;
-* **hierarchical** because different alloy regimes are treated using different physical assumptions;
-* **interpretable** because the model structure and descriptors can be directly examined;
-* **screening-oriented** because it is intended to identify promising compositions before detailed evaluation.
+* **Hierarchical** because the Nb-based alloy space is divided into three compositional regimes.
+* **Physics-informed** because the descriptors and relationships are motivated by alloy chemistry and phase-stability considerations.
+* **Analytical** because the final models are explicit mathematical relationships.
+* **Interpretable** because individual composition terms and descriptors can be inspected directly.
+* **Screening-oriented** because the framework is designed for rapid candidate evaluation rather than replacing detailed materials analysis.
 
-URADES is not intended to be classified as:
+URADES is not intended to replace:
 
-* a purely machine-learning model;
-* a CALPHAD framework;
-* a first-principles method;
-* a replacement for experimental characterization.
-
----
-
-# 25. Development and Repository Scope
-
-The original development of URADES involved:
-
-* descriptor calculations;
-* multiple model formulations;
-* parameter fitting;
-* sensitivity studies;
-* validation;
-* LOOCV analysis;
-* CALPHAD comparison;
-* inverse-design searches;
-* machine-learning benchmarking;
-* application development.
-
-The public repository contains the **cleaned final implementation and the analyses required to understand and reproduce the final framework**.
-
-Development-only scripts, temporary calculations, superseded implementations, unrelated scripts, and unvalidated models are intentionally excluded.
-
-Examples of excluded development material include:
-
-* obsolete grid-search implementations;
-* broken intermediate scripts;
-* unrelated exploratory code;
-* external-file-dependent development scripts;
-* high-temperature yield-strength models that remain under development;
-* preliminary ML benchmarking code.
+* CALPHAD;
+* first-principles calculations;
+* experimental characterization;
+* detailed microstructural modelling.
 
 ---
 
-# 26. Citation
+# 30. What Is Included
+
+The public repository contains the cleaned implementation required to reproduce the final URADES workflow:
+
+* final model implementation;
+* centralized datasets;
+* GVI calculation;
+* boundary-condition checks;
+* Case 1 IAS model;
+* Case 2 SR model;
+* Case 3 EI classifier;
+* validation scripts;
+* GVI/CALPHAD comparison;
+* α-sensitivity analysis;
+* inverse-design search;
+* demonstration code;
+* Streamlit application.
+
+Development-only and superseded scripts are intentionally excluded.
+
+---
+
+# 31. What Is Not Included
+
+The following are not part of the final core repository:
+
+* obsolete early grid-search implementations;
+* broken development scripts;
+* scripts dependent on external undocumented/experimental files;
+* superseded model formulations;
+* partially validated high-temperature property models;
+* preliminary machine-learning benchmarking scripts.
+
+This keeps the repository focused on the final URADES framework rather than the entire history of its development.
+
+---
+
+# 32. Reproducibility
+
+The repository is structured so that the principal calculations are centralized and reproducible.
+
+The relationship between the main components is:
+
+```text
+data.py
+   |
+   v
+core.py
+   |
+   +-------- validation/
+   |
+   +-------- analysis/
+   |
+   +-------- inverse_design/
+   |
+   +-------- examples/
+   |
+   +-------- app/
+```
+
+All of these components use the same core implementation rather than maintaining separate copies of the model equations.
+
+This reduces the possibility of different scripts silently using different model definitions.
+
+---
+
+# 33. Citation
 
 If you use URADES, its models, datasets, or associated analyses in academic work, please cite the corresponding publication:
 
@@ -1001,7 +1194,7 @@ If you use URADES, its models, datasets, or associated analyses in academic work
 
 ---
 
-# 27. License
+# 34. License
 
 This project is distributed under the license provided in:
 
@@ -1009,11 +1202,11 @@ This project is distributed under the license provided in:
 LICENSE
 ```
 
-Please check the individual data sources and cited literature when redistributing datasets derived from external publications.
+Please consult the original sources when redistributing literature-derived datasets.
 
 ---
 
-# 28. Author
+# 35. Author
 
 **Srivathsan (SC23B047)**
 
@@ -1022,41 +1215,46 @@ Please check the individual data sources and cited literature when redistributin
 Research interests:
 
 * Refractory alloys
-* Computational materials science
-* Materials informatics
 * Nb-based alloy design
-* Alloy screening
+* Materials informatics
+* Computational materials science
 * Physics-informed modelling
+* Alloy screening
 
 ---
 
-# 29. Repository Status
+# 36. Repository Status
 
-**Status: Research / Reproducible Implementation**
+**Research / Reproducible Implementation**
 
-URADES is provided as a research framework for rapid screening and computational design of Nb-based refractory alloys.
-
-The repository is intended to provide a transparent connection between:
+URADES provides a computational framework connecting alloy composition to:
 
 ```text
 Composition
     |
     v
-Global Viability Index (GVI)
+Case identification
     |
     v
-Case-specific model
+Boundary-condition screening
     |
     v
-Prediction / classification
+Global Viability Index
+    |
+    v
+Case-specific analytical model
+    |
+    v
+DBTT prediction / embrittlement classification
     |
     v
 Candidate screening
 ```
 
-and the corresponding experimental and CALPHAD validation.
+The framework is intended to support rapid computational screening of Nb-based refractory alloy compositions prior to detailed CALPHAD and experimental investigation.
 
 ```
+
 
 
 
