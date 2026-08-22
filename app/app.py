@@ -339,9 +339,7 @@ st.markdown(f"""
     URADES
   </h1>
   <p style='color:{MUTED};font-size:0.95rem;max-width:640px;margin:0;'>
-    Unified Refractory Alloy Descriptor and Embrittlement Screener —
-    a physics-based hierarchical framework for predicting DBTT and
-    embrittlement behaviour in Nb-based alloys across three compositional regimes.
+    Unified Refractory Alloy Descriptor and Embrittlement Screener (URADES) — a physics-based hierarchical framework for screening Nb-based refractory alloys across three compositional regimes, with analytical prediction of DBTT, yield strength, and embrittlement behaviour.
   </p>
 </div>
 <hr/>
