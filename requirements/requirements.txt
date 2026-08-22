@@ -1,7 +1,0 @@
-matplotlib==3.9.0
-numpy
-scipy
-pandas
-streamlit
-scikit-learn
-openpyxl
