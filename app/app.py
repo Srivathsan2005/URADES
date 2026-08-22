@@ -14,6 +14,7 @@ Run from the repository root:
 import os
 import sys
 import math
+from itertools import product
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -23,7 +24,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from urades.core import (
     run_URADES, calc_GVI, predict_case2, predict_case3,
-    identify_case, atomic_to_weight,
+    predict_case1, identify_case, atomic_to_weight, weight_to_atomic,
+    check_boundary_conditions,
     IAS_BASELINE, IAS_COEFFS,
     SR_kW, SR_kMo, SR_kBuffer, SR_BASELINE,
     EI_ALPHA, EI_DUCTILE, EI_TRANSITION, EI_BRITTLE,
@@ -40,7 +42,6 @@ from urades.data import (
 
 st.set_page_config(
     page_title="URADES",
-    page_icon="⚗️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -55,11 +56,11 @@ C3_COL   = "#DC2626"   # Case 3 — red
 PASS_COL = "#16A34A"
 FAIL_COL = "#DC2626"
 FLAG_COL = "#D97706"
-BG       = "#0F172A"   # near-black background
-CARD_BG  = "#1E293B"   # slightly lighter card surface
-BORDER   = "#334155"
-TEXT     = "#F1F5F9"
-MUTED    = "#94A3B8"
+BG       = "#F3F6FA"
+CARD_BG  = "#FFFFFF"
+BORDER   = "#D8E0EA"
+TEXT     = "#172033"
+MUTED    = "#667085"
 
 ZONE_COL = {
     DUCTILE:    "#16A34A",
@@ -81,6 +82,15 @@ st.markdown(f"""
       font-family: 'Inter', 'Segoe UI', sans-serif;
   }}
   [data-testid="stHeader"] {{ background: transparent; }}
+  [data-testid="stStatusWidget"],
+  [data-testid="stStatusWidget"] button {{
+      color: {TEXT} !important;
+      opacity: 1 !important;
+  }}
+  [data-testid="stStatusWidget"] svg {{
+      color: {C2_COL} !important;
+      stroke: {C2_COL} !important;
+  }}
 
   /* Cards */
   .urades-card {{
@@ -131,157 +141,191 @@ st.markdown(f"""
       font-size:0.7rem; font-weight:700; letter-spacing:0.12em;
       text-transform:uppercase; color:{MUTED}; margin-bottom:4px;
   }}
+
   .section-title {{
       font-size:1.1rem; font-weight:700; color:{TEXT}; margin-bottom:0.8rem;
   }}
 
-  /* Tab strip */
-  .stTabs [data-baseweb="tab"] {{
-      color: {MUTED}; font-weight:600;
+  .stTabs [data-baseweb="tab"],
+  .stTabs [data-baseweb="tab"] p,
+  .stTabs [role="tab"],
+  .stTabs [role="tab"] p {{
+      color: {MUTED} !important;
+      font-weight:600 !important;
   }}
-  .stTabs [aria-selected="true"] {{
-      color: {TEXT};
+  .stTabs [data-baseweb="tab"][aria-selected="true"],
+  .stTabs [data-baseweb="tab"][aria-selected="true"] p,
+  .stTabs [role="tab"][aria-selected="true"],
+  .stTabs [role="tab"][aria-selected="true"] p {{
+      color: {TEXT} !important;
       border-bottom: 2px solid {C2_COL};
   }}
 
-  /* Slider labels */
   .stSlider label {{ color:{MUTED} !important; font-size:0.8rem; }}
-
-  /* Divider */
+    [data-testid="stNumberInput"] label,
+    [data-testid="stSelectbox"] label {{ color:{MUTED} !important; font-size:0.76rem; }}
+    [data-testid="stVerticalBlock"] > [data-testid="stElement"] {{ margin-bottom:0.35rem; }}
+    .bound-heading {{ color:{MUTED}; font-size:0.7rem; text-transform:uppercase;
+                                        letter-spacing:0.08em; margin:0.2rem 0 0.1rem 0; }}
+    .bound-name {{ color:{TEXT}; font-weight:700; padding-top:0.55rem; }}
   hr {{ border-color:{BORDER}; margin:1.2rem 0; }}
 </style>
 """, unsafe_allow_html=True)
 
-# =============================================================================
-# HELPERS
-# =============================================================================
-
-def gvi_bar_html(score: float, label: str = "") -> str:
-    pct   = round(score * 100, 1)
-    color = PASS_COL if score >= GVI_THRESHOLD else FAIL_COL
-    return f"""
-    <div style='margin-bottom:6px;'>
-      <div style='display:flex;justify-content:space-between;
-                  font-size:0.75rem;color:{MUTED};margin-bottom:2px;'>
-        <span>{label}</span><span>{pct:.1f}%</span>
-      </div>
-      <div class='gvi-bar-outer'>
-        <div style='width:{pct}%;height:100%;background:{color};
-                    border-radius:5px;transition:width 0.4s;'></div>
-      </div>
-    </div>"""
-
 
 def metric_html(label, value, sub=""):
-    return f"""
-    <div class='metric-tile'>
-      <div class='metric-label'>{label}</div>
-      <div class='metric-value'>{value}</div>
-      <div class='metric-sub'>{sub}</div>
-    </div>"""
+    return (f"<div class='metric-tile'><div class='metric-label'>{label}</div>"
+            f"<div class='metric-value'>{value}</div><div class='metric-sub'>{sub}</div></div>")
+
+
+def gvi_bar_html(score: float, label: str = "") -> str:
+    pct = round(score * 100, 1)
+    color = PASS_COL if score >= GVI_THRESHOLD else FAIL_COL
+    return (f"<div style='color:{MUTED};font-size:0.75rem'>{label}"
+            f" <strong>{pct:.1f}%</strong></div>")
 
 
 def case_badge(case: int) -> str:
-    labels = {1: "Case 1 — IAS", 2: "Case 2 — SR", 3: "Case 3 — EI"}
-    cls    = {1: "badge-c1",     2: "badge-c2",    3: "badge-c3"}
-    return f"<span class='badge {cls[case]}'>{labels[case]}</span>"
+    return f"<span class='badge badge-c{case}'>{CASE_LABELS[case]}</span>"
 
 
 def status_badge(status: str) -> str:
-    cls = {"OK": "badge-ok", "FLAGGED": "badge-flagged", "REJECTED": "badge-rejected"}
-    css = cls.get(status, "badge-flagged")
+    css = {"OK": "badge-ok", "FLAGGED": "badge-flagged",
+           "REJECTED": "badge-rejected"}.get(status, "badge-flagged")
     return f"<span class='badge {css}'>{status}</span>"
+
+
+def dark_fig(w=6, h=4):
+    fig, ax = plt.subplots(figsize=(w, h))
+    fig.patch.set_facecolor(CARD_BG)
+    ax.set_facecolor(BG)
+    for spine in ax.spines.values():
+        spine.set_edgecolor(BORDER)
+    ax.tick_params(colors=MUTED, labelsize=8)
+    ax.xaxis.label.set_color(MUTED)
+    ax.yaxis.label.set_color(MUTED)
+    ax.title.set_color(TEXT)
+    ax.grid(True, color=BORDER, linewidth=0.6, linestyle=":")
+    return fig, ax
 
 
 @st.cache_data
 def build_all_alloy_data():
-    """Compile property data for all three datasets for the explorer charts."""
+    """Compile the common chart data used by the dataset explorer."""
     rows = []
-
-    # Case 1
     for name, W, Mo, V, Ti, Zr, Hf, exp_dbtt in CASE1_DATA:
-        nb   = 100 - W - Mo - V - Ti - Zr - Hf
-        comp_wt = {"Nb":nb,"W":W,"Mo":Mo,"V":V,"Ti":Ti,"Zr":Zr,"Hf":Hf}
-        from urades.core import weight_to_atomic
-        comp_at = weight_to_atomic(comp_wt)
-        pred = IAS_BASELINE + sum(IAS_COEFFS.get(e,0)*v for e,v in comp_wt.items())
-        gvi  = calc_GVI(comp_at, 1)
-        rows.append({
-            "case": 1, "name": name,
-            "Nb_at": comp_at.get("Nb",0),
-            "exp_dbtt": exp_dbtt, "pred_dbtt": round(pred,1),
-            "density": round(_calc_density(comp_at),3),
-            "Tm":  round(_calc_Tm_ROM(comp_at),0),
-            "VEC": round(_calc_VEC(comp_at),3),
-            "delta": round(_calc_delta(comp_at),3),
-            "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
-            "S_delta": gvi["S_delta"], "S_SR": None,
-            "YS": 150+15*W+25*Mo+15*Zr+8*Hf+5*Ti,
-            "SR": None, "EI": None, "zone": None,
-        })
-
-    # Case 2
-    for name, W, Mo, Hf, Zr, Ti, exp_dbtt, in_loocv in CASE2_DATA:
-        nb = 100-W-Mo-Hf-Zr-Ti
-        comp = {"Nb":nb,"W":W,"Mo":Mo,"Hf":Hf,"Zr":Zr,"Ti":Ti}
+        comp_wt = {"Nb": 100 - W - Mo - V - Ti - Zr - Hf,
+                   "W": W, "Mo": Mo, "V": V, "Ti": Ti, "Zr": Zr, "Hf": Hf}
+        comp = weight_to_atomic(comp_wt)
+        props = predict_case1(comp)
+        gvi = calc_GVI(comp, 1)
+        rows.append({"case": 1, "name": name, "Nb_at": comp["Nb"],
+                     "exp_dbtt": exp_dbtt, "pred_dbtt": props["DBTT"],
+                     "density": _calc_density(comp), "Tm": _calc_Tm_ROM(comp),
+                     "VEC": _calc_VEC(comp), "delta": _calc_delta(comp),
+                     "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
+                     "S_delta": gvi["S_delta"], "S_SR": None,
+                     "YS": props["YS_MPa"], "SR": None, "EI": None, "zone": None})
+    for name, W, Mo, Hf, Zr, Ti, exp_dbtt, _ in CASE2_DATA:
+        comp = {"Nb": 100 - W - Mo - Hf - Zr - Ti, "W": W, "Mo": Mo,
+                "Hf": Hf, "Zr": Zr, "Ti": Ti}
         props = predict_case2(comp)
-        gvi   = calc_GVI(comp, 2)
-        rows.append({
-            "case": 2, "name": name,
-            "Nb_at": nb,
-            "exp_dbtt": exp_dbtt, "pred_dbtt": props["DBTT"],
-            "density": props["density"],
-            "Tm": props["Tm_C"],
-            "VEC": round(_calc_VEC(comp),3),
-            "delta": round(_calc_delta(comp),3),
-            "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
-            "S_delta": gvi["S_delta"], "S_SR": gvi.get("S_SR"),
-            "YS": props["YS_MPa"],
-            "SR": props["SR"], "EI": None, "zone": None,
-        })
-
-    # Case 3
+        gvi = calc_GVI(comp, 2)
+        rows.append({"case": 2, "name": name, "Nb_at": comp["Nb"],
+                     "exp_dbtt": exp_dbtt, "pred_dbtt": props["DBTT"],
+                     "density": props["density"], "Tm": props["Tm_C"],
+                     "VEC": _calc_VEC(comp), "delta": _calc_delta(comp),
+                     "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
+                     "S_delta": gvi["S_delta"], "S_SR": gvi.get("S_SR"),
+                     "YS": props["YS_MPa"], "SR": props["SR"], "EI": None, "zone": None})
     for name, comp, exp_zone in CASE3_DATA:
         props = predict_case3(comp)
-        gvi   = calc_GVI(comp, 3)
-        total = sum(comp.values())
-        nb_at = comp.get("Nb",0)/total*100
-        Tm    = _calc_Tm_ROM(comp)
-        rho   = _calc_density(comp)
-        rows.append({
-            "case": 3, "name": name,
-            "Nb_at": nb_at,
-            "exp_dbtt": None, "pred_dbtt": None,
-            "density": round(rho,3),
-            "Tm": round(Tm,0),
-            "VEC": round(_calc_VEC(comp),3),
-            "delta": round(_calc_delta(comp),3),
-            "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
-            "S_delta": gvi["S_delta"], "S_SR": None,
-            "YS": None,
-            "SR": None, "EI": props["EI"], "zone": props["zone"],
-        })
-
+        gvi = calc_GVI(comp, 3)
+        rows.append({"case": 3, "name": name, "Nb_at": comp.get("Nb", 0),
+                     "exp_dbtt": None, "pred_dbtt": None,
+                     "density": _calc_density(comp), "Tm": _calc_Tm_ROM(comp),
+                     "VEC": _calc_VEC(comp), "delta": _calc_delta(comp),
+                     "GVI": gvi["GVI"], "S_VEC": gvi["S_VEC"],
+                     "S_delta": gvi["S_delta"], "S_SR": None, "YS": None,
+                     "SR": None, "EI": props["EI"], "zone": props["zone"]})
     return rows
-
-
-# Shared matplotlib style for dark background
-def dark_fig(w=6, h=4):
-    fig, ax = plt.subplots(figsize=(w, h))
-    fig.patch.set_facecolor("#1E293B")
-    ax.set_facecolor("#0F172A")
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#334155")
-    ax.tick_params(colors="#94A3B8", labelsize=8)
-    ax.xaxis.label.set_color("#94A3B8")
-    ax.yaxis.label.set_color("#94A3B8")
-    ax.title.set_color("#F1F5F9")
-    ax.grid(True, color="#1E293B", linewidth=0.6, linestyle=":")
-    return fig, ax
 
 
 CASE_COLORS = {1: C1_COL, 2: C2_COL, 3: C3_COL}
 CASE_LABELS = {1: "Case 1 (IAS)", 2: "Case 2 (SR)", 3: "Case 3 (EI)"}
+
+
+def bounds_grid(minimum, maximum, step):
+    """Return inclusive grid points without exceeding the upper bound."""
+    if maximum < minimum:
+        return np.array([])
+    count = int(math.floor((maximum - minimum) / step + 1e-12))
+    return minimum + step * np.arange(count + 1)
+
+
+def search_inverse_design(target_dbtt, dbtt_tolerance, min_ys, max_density,
+                          min_tm, family, bounds, step):
+    """Search the requested at% bounds using the existing URADES models."""
+    candidates = []
+    elements = ["W", "Mo", "Hf", "Zr", "Ti"]
+    values = [
+        bounds_grid(bounds[element][0], bounds[element][1], step)
+        for element in elements
+    ]
+    family_case = {"Case 1 (IAS)": 1, "Case 2 (RCCA)": 2,
+                   "Case 3 (RHEA)": 3}.get(family)
+
+    for W, Mo, Hf, Zr, Ti in product(*values):
+        if family_case == 2 and Hf + Zr + Ti > 22.4:
+            continue
+        nb = 100.0 - W - Mo - Hf - Zr - Ti
+        if nb <= 0:
+            continue
+
+        composition = {"Nb": nb, "W": W, "Mo": Mo, "Hf": Hf,
+                       "Zr": Zr, "Ti": Ti}
+        case, _, _ = identify_case(composition)
+        if family_case is not None and case != family_case:
+            continue
+        passed, _ = check_boundary_conditions(composition, case)
+        if not passed:
+            continue
+
+        gvi = calc_GVI(composition, case)
+        if gvi["GVI"] < GVI_THRESHOLD:
+            continue
+        if case == 1:
+            props = predict_case1(composition)
+        elif case == 2:
+            props = predict_case2(composition)
+        else:
+            props = predict_case3(composition)
+
+        dbtt = props.get("DBTT")
+        filter_density = props["density"]
+        filter_tm = props["Tm_C"]
+        if case == 3:
+            filter_density = _calc_density(composition)
+            filter_tm = _calc_Tm_ROM(composition)
+        if dbtt is not None and abs(dbtt - target_dbtt) > dbtt_tolerance:
+            continue
+        if "YS_MPa" in props and props["YS_MPa"] < min_ys:
+            continue
+        if filter_density > max_density or filter_tm < min_tm:
+            continue
+
+        candidates.append({
+            "case": case, "composition": composition, "DBTT": dbtt,
+            "YS": props.get("YS_MPa"), "density": props["density"],
+            "Tm": props["Tm_C"], "GVI": gvi["GVI"],
+            "EI": props.get("EI"), "zone": props.get("zone"),
+        })
+
+    candidates.sort(key=lambda row: (
+        row["DBTT"] is None,
+        row["DBTT"] if row["DBTT"] is not None else 0,
+        -row["GVI"]))
+    return candidates
 
 # =============================================================================
 # HEADER
@@ -307,7 +351,95 @@ st.markdown(f"""
 # TABS
 # =============================================================================
 
-tab_screen, tab_explore = st.tabs(["⚗️  Alloy Screener", "📊  Dataset Explorer"])
+tab_inverse, tab_screen, tab_explore = st.tabs([
+    "Inverse Design", "Alloy Screener", "Dataset Explorer"])
+
+# =============================================================================
+# TAB 1 — INVERSE DESIGN
+# =============================================================================
+
+with tab_inverse:
+    st.markdown("<div class='section-eyebrow'>Inverse design constraints</div>",
+                unsafe_allow_html=True)
+    col_form, col_result = st.columns([1, 1.4], gap="large")
+
+    with col_form:
+        st.markdown("**Constraints**")
+        constraint_cols = st.columns(2)
+        with constraint_cols[0]:
+            target_dbtt = st.number_input("Target DBTT (°C)", value=-50.0, step=5.0)
+            min_ys = st.number_input("Min YS (MPa)", min_value=0.0,
+                                     value=400.0, step=25.0)
+            min_tm = st.number_input("Min Tm (°C)", min_value=0.0,
+                                     value=1800.0, step=50.0)
+        with constraint_cols[1]:
+            dbtt_tolerance = st.number_input("± Tolerance", min_value=0.0,
+                                             value=25.0, step=5.0)
+            max_density = st.number_input("Max ρ (g/cc)", min_value=0.0,
+                                          value=10.0, step=0.5)
+            family = st.selectbox("Family", ["Any", "Case 1 (IAS)",
+                                             "Case 2 (RCCA)", "Case 3 (RHEA)"])
+
+        st.markdown("**Element Bounds (at%)**")
+        bounds = {}
+        heading_cols = st.columns([0.55, 1, 1])
+        for column, heading in zip(heading_cols, ["Element", "Min", "Max"]):
+            column.markdown(f"<div class='bound-heading'>{heading}</div>",
+                            unsafe_allow_html=True)
+        for index, element in enumerate(["W", "Mo", "Hf", "Zr", "Ti"]):
+            bound_cols = st.columns([0.55, 1, 1])
+            bound_cols[0].markdown(f"<div class='bound-name'>{element}</div>",
+                                   unsafe_allow_html=True)
+            bounds[element] = (
+                bound_cols[1].number_input(f"{element} min", min_value=0.0,
+                                           max_value=100.0, value=0.0, step=1.0,
+                                           key=f"inverse_{element}_min",
+                                           label_visibility="collapsed"),
+                bound_cols[2].number_input(f"{element} max", min_value=0.0,
+                                           max_value=100.0, value=40.0, step=1.0,
+                                           key=f"inverse_{element}_max",
+                                           label_visibility="collapsed"),
+            )
+        st.caption("Hf + Zr + Ti ≤ 22.4 applies mainly to Case 2 (RCCA).")
+        st.caption("Nb = 100 − (W + Mo + Hf + Zr + Ti) is auto-computed.")
+        search_step = st.number_input("Customizable Search Step (at%)",
+                                      min_value=0.1, value=2.0, step=0.5)
+        search_btn = st.button("Search candidates", use_container_width=True,
+                               type="primary")
+
+    with col_result:
+        if search_btn:
+            candidates = search_inverse_design(
+                target_dbtt, dbtt_tolerance, min_ys, max_density, min_tm,
+                family, bounds, search_step)
+            st.markdown("**Qualified candidates**")
+            if candidates:
+                rows = []
+                for candidate in candidates[:100]:
+                    composition = candidate["composition"]
+                    rows.append({
+                        "Family": CASE_LABELS[candidate["case"]],
+                        "W": round(composition["W"], 1),
+                        "Mo": round(composition["Mo"], 1),
+                        "Hf": round(composition["Hf"], 1),
+                        "Zr": round(composition["Zr"], 1),
+                        "Ti": round(composition["Ti"], 1),
+                        "Nb": round(composition["Nb"], 1),
+                        "DBTT": candidate["DBTT"],
+                        "YS (MPa)": candidate["YS"],
+                        "ρ (g/cc)": candidate["density"],
+                        "Tm (°C)": candidate["Tm"],
+                        "GVI": round(candidate["GVI"], 4),
+                        "EI": candidate["EI"], "Zone": candidate["zone"],
+                    })
+                st.dataframe(rows, use_container_width=True, hide_index=True)
+                st.caption(f"Showing {len(rows)} of {len(candidates)} matches.")
+            else:
+                st.info("No candidates match these constraints. Increase the search step or relax a target.")
+            if family == "Case 3 (RHEA)":
+                st.caption("Case 3 has no DBTT model; its candidates use the other constraints.")
+        else:
+            st.info("Set constraints and search the alloy design space.")
 
 # =============================================================================
 # TAB 1 — ALLOY SCREENER
@@ -343,7 +475,7 @@ with tab_screen:
             f"padding:6px 0;'>Nb (balance) = {Nb:.1f} {unit}</div>",
             unsafe_allow_html=True)
 
-        run_btn = st.button("Run URADES ▶", use_container_width=True,
+        run_btn = st.button("Run URADES", use_container_width=True,
                             type="primary", disabled=(Nb <= 0))
 
     with col_result:
@@ -461,7 +593,7 @@ with tab_screen:
         else:
             st.markdown(f"""
             <div class='urades-card' style='text-align:center;padding:2.5rem;'>
-              <div style='font-size:2.5rem;margin-bottom:0.6rem;'>⚗️</div>
+              <div style='font-size:1.2rem;font-weight:700;margin-bottom:0.6rem;'>Ready to screen</div>
               <div style='color:{MUTED};font-size:0.9rem;'>
                 Adjust the sliders and click <strong>Run URADES</strong>
                 to screen your alloy.
