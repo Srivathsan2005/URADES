@@ -1,6 +1,6 @@
+matplotlib==3.9.0
 numpy
 scipy
-matplotlib
 pandas
 streamlit
 scikit-learn
